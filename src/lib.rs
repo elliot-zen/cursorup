@@ -22,12 +22,12 @@ pub mod tmpdir {
         }
     }
 
-    // impl Drop for TmpDir {
-    //     fn drop(&mut self) {
-    //         println!("Cleaning up temporary directory: {:?}", self.path);
-    //         let _ = std::fs::remove_dir_all(&self.path);
-    //     }
-    // }
+    impl Drop for TmpDir {
+        fn drop(&mut self) {
+            println!("Cleaning up temporary directory: {:?}", self.path);
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -129,8 +129,26 @@ async fn install(
     let appimage_dest_path = dest_dir.join(appimage_path.file_name().unwrap());
     fs::copy(appimage_path, &appimage_dest_path).await?;
     println!("Copied AppImage to {:?}", appimage_dest_path);
-
+    echo_2_desktop(&appimage_dest_path, &icon_dest_path).await?;
     println!("Installation complete!");
+    Ok(())
+}
+
+pub async fn echo_2_desktop(appimage_path: &PathBuf, icon_path: &PathBuf) -> Result<()> {
+    let contents = format!(
+        r#"[Desktop Entry]
+Name=Cursor
+Exec={}
+Icon={}
+Type=Application
+Categories=Utility;Development;
+Terminal=false"#,
+        appimage_path.to_str().unwrap(),
+        icon_path.to_str().unwrap(),
+    );
+    let home_dir = PathBuf::from(std::env::var("HOME")?);
+    let desktop_path = home_dir.join(".local/share/applications/cursor.desktop");
+    fs::write(desktop_path, contents).await?;
     Ok(())
 }
 
@@ -172,19 +190,14 @@ pub async fn run() -> Result<()> {
     fs::create_dir_all(&tmp_dir.path).await?;
     println!("Created temporary directory: {:?}", tmp_dir.path);
 
-    // let download_url = &metadata.download_url;
-    // let file_name = download_url
-    //     .split('/')
-    //     .last()
-    //     .unwrap_or("cursor-download.tmp");
-    // let appimage_path = tmp_dir.path.join(file_name);
-    //
-    // download_file(download_url, &appimage_path).await?;
-
-    let file_name = "Cursor-1.2.2-x86_64.AppImage";
+    let download_url = &metadata.download_url;
+    let file_name = download_url
+        .split('/')
+        .last()
+        .unwrap_or("cursor-download.tmp");
     let appimage_path = tmp_dir.path.join(file_name);
+    download_file(download_url, &appimage_path).await?;
     install(&appimage_path, &metadata.version, &tmp_dir.path).await?;
-
     println!("Cursorup process finished successfully.");
     Ok(())
 }
